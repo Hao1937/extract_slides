@@ -1,5 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import argparse
 import json
 import re
 import zipfile
@@ -8,16 +9,32 @@ from typing import Iterable
 from xml.etree import ElementTree as ET
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PPTS_DIR = BASE_DIR / "ppts"
-OUTPUT_PATH = BASE_DIR / "data" / "slides.json"
-
+DEFAULT_BASE_DIR = Path(__file__).resolve().parent
 NS = {
     "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
 }
 TITLE_PLACEHOLDER_TYPES = {"title", "ctrTitle", "subTitle"}
 SLIDE_NAME_RE = re.compile(r"ppt/slides/slide(\d+)\.xml$")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Extract slide titles and body text from all PPTX files in a directory."
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=DEFAULT_BASE_DIR / "ppts",
+        help="Directory containing .pptx files. Defaults to ./ppts beside this script.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_BASE_DIR / "data" / "slides.json",
+        help="Output JSON path. Defaults to ./data/slides.json beside this script.",
+    )
+    return parser.parse_args()
 
 
 def local_name(tag: str) -> str:
@@ -133,16 +150,20 @@ def extract_ppt_records(pptx_path: Path) -> list[dict[str, str | int]]:
 
 
 def main() -> int:
-    if not PPTS_DIR.exists():
-        print(f"未找到目录: {PPTS_DIR}")
-        print("请先把 .pptx 文件放到脚本同级目录下的 ppts 文件夹中。")
+    args = parse_args()
+    input_dir = args.input_dir.resolve()
+    output_path = args.output.resolve()
+
+    if not input_dir.exists():
+        print(f"未找到目录: {input_dir}")
+        print("请先把 .pptx 文件放到输入目录中。")
         return 1
 
-    pptx_files = sorted(PPTS_DIR.glob("*.pptx"))
+    pptx_files = sorted(input_dir.glob("*.pptx"))
     if not pptx_files:
-        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        OUTPUT_PATH.write_text("[]", encoding="utf-8")
-        print(f"未找到 .pptx 文件，已输出空结果到: {OUTPUT_PATH}")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("[]", encoding="utf-8")
+        print(f"未找到 .pptx 文件，已输出空结果到: {output_path}")
         return 0
 
     all_records: list[dict[str, str | int]] = []
@@ -152,14 +173,15 @@ def main() -> int:
         except zipfile.BadZipFile:
             print(f"跳过损坏或非标准的 PPTX 文件: {pptx_file.name}")
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
         json.dumps(all_records, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
     print(f"处理完成，共提取 {len(all_records)} 条记录。")
-    print(f"输出文件: {OUTPUT_PATH}")
+    print(f"输入目录: {input_dir}")
+    print(f"输出文件: {output_path}")
     return 0
 
 
